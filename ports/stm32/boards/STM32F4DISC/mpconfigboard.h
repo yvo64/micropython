@@ -27,6 +27,8 @@
 #define MICROPY_HW_UART2_RX     (pin_A3)
 #define MICROPY_HW_UART2_RTS    (pin_A1)
 #define MICROPY_HW_UART2_CTS    (pin_A0)
+#define MICROPY_HW_UART_REPL PYB_UART_2
+#define MICROPY_HW_UART_REPL_BAUD 115200
 #define MICROPY_HW_UART3_TX     (pin_D8)
 #define MICROPY_HW_UART3_RX     (pin_D9)
 #define MICROPY_HW_UART3_RTS    (pin_D12)
@@ -38,11 +40,13 @@
 #define MICROPY_HW_UART4_TX     (pin_A0)
 #define MICROPY_HW_UART4_RX     (pin_A1)
 #endif
+# if 0
 // NOTE: PC7 is connected to MCLK on the Audio chip. This is an input signal
 //       so I think as long as you're not using the audio chip then it should
 //       be fine to use as a UART pin.
 #define MICROPY_HW_UART6_TX     (pin_C6)
 #define MICROPY_HW_UART6_RX     (pin_C7)
+#endif
 
 // I2C buses
 #define MICROPY_HW_I2C1_SCL (pin_B6)
