@@ -55,7 +55,8 @@
 	url = https://github.com/georgerobotics/cyw43-driver.git
 [submodule "lib/micropython-lib"]
 	path = lib/micropython-lib
-	url = https://github.com/micropython/micropython-lib.git
+	url = https://github.com/yvo64/micropython-lib.git
+	branch = dev-branch
 [submodule "lib/protobuf-c"]
 	path = lib/protobuf-c
 	url = https://github.com/protobuf-c/protobuf-c.git
