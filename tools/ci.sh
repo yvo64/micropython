@@ -55,11 +55,12 @@ function ci_code_size_setup {
     sudo apt-get install gcc-multilib
     gcc --version
     ci_gcc_arm_setup
+    ci_gcc_riscv_setup
 }
 
 function ci_code_size_build {
     # check the following ports for the change in their code size
-    PORTS_TO_CHECK=bmusxpd
+    PORTS_TO_CHECK=bmusxpdv
     SUBMODULES="lib/asf4 lib/berkeley-db-1.xx lib/btstack lib/cyw43-driver lib/lwip lib/mbedtls lib/micropython-lib lib/nxp_driver lib/pico-sdk lib/stm32lib lib/tinyusb"
 
     # starts off at either the ref/pull/N/merge FETCH_HEAD, or the current branch HEAD
@@ -244,41 +245,35 @@ function ci_powerpc_build {
 }
 
 ########################################################################################
-# ports/qemu-arm
+# ports/qemu
 
-function ci_qemu_arm_setup {
+function ci_qemu_setup_arm {
     ci_gcc_arm_setup
     sudo apt-get update
     sudo apt-get install qemu-system
     qemu-system-arm --version
 }
 
-function ci_qemu_arm_build {
-    make ${MAKEOPTS} -C mpy-cross
-    make ${MAKEOPTS} -C ports/qemu-arm submodules
-    make ${MAKEOPTS} -C ports/qemu-arm CFLAGS_EXTRA=-DMP_ENDIANNESS_BIG=1
-    make ${MAKEOPTS} -C ports/qemu-arm clean
-    make ${MAKEOPTS} -C ports/qemu-arm test
-    make ${MAKEOPTS} -C ports/qemu-arm BOARD=sabrelite test
-}
-
-########################################################################################
-# ports/qemu-riscv
-
-function ci_qemu_riscv_setup {
+function ci_qemu_setup_rv32 {
     ci_gcc_riscv_setup
     sudo apt-get update
     sudo apt-get install qemu-system
     qemu-system-riscv32 --version
 }
 
-function ci_qemu_riscv_build {
+function ci_qemu_build_arm {
     make ${MAKEOPTS} -C mpy-cross
-    make ${MAKEOPTS} -C ports/qemu-riscv submodules
-    make ${MAKEOPTS} -C ports/qemu-riscv
-    make ${MAKEOPTS} -C ports/qemu-riscv clean
-    make ${MAKEOPTS} -C ports/qemu-riscv -f Makefile.test submodules
-    make ${MAKEOPTS} -C ports/qemu-riscv -f Makefile.test test
+    make ${MAKEOPTS} -C ports/qemu submodules
+    make ${MAKEOPTS} -C ports/qemu CFLAGS_EXTRA=-DMP_ENDIANNESS_BIG=1
+    make ${MAKEOPTS} -C ports/qemu clean
+    make ${MAKEOPTS} -C ports/qemu test
+    make ${MAKEOPTS} -C ports/qemu BOARD=SABRELITE test
+}
+
+function ci_qemu_build_rv32 {
+    make ${MAKEOPTS} -C mpy-cross
+    make ${MAKEOPTS} -C ports/qemu BOARD=VIRT_RV32 submodules
+    make ${MAKEOPTS} -C ports/qemu BOARD=VIRT_RV32 test
 }
 
 ########################################################################################
@@ -416,7 +411,6 @@ CI_UNIX_OPTS_QEMU_MIPS=(
     CROSS_COMPILE=mips-linux-gnu-
     VARIANT=coverage
     MICROPY_STANDALONE=1
-    LDFLAGS_EXTRA="-static"
 )
 
 CI_UNIX_OPTS_QEMU_ARM=(
@@ -428,6 +422,7 @@ CI_UNIX_OPTS_QEMU_ARM=(
 CI_UNIX_OPTS_QEMU_RISCV64=(
     CROSS_COMPILE=riscv64-linux-gnu-
     VARIANT=coverage
+    MICROPY_STANDALONE=1
 )
 
 function ci_unix_build_helper {
@@ -657,22 +652,23 @@ function ci_unix_macos_run_tests {
 
 function ci_unix_qemu_mips_setup {
     sudo apt-get update
-    sudo apt-get install gcc-mips-linux-gnu g++-mips-linux-gnu
+    sudo apt-get install gcc-mips-linux-gnu g++-mips-linux-gnu libc6-mips-cross
     sudo apt-get install qemu-user
     qemu-mips --version
+    sudo mkdir /etc/qemu-binfmt
+    sudo ln -s /usr/mips-linux-gnu/ /etc/qemu-binfmt/mips
 }
 
 function ci_unix_qemu_mips_build {
-    # qemu-mips on GitHub Actions will seg-fault if not linked statically
     ci_unix_build_helper "${CI_UNIX_OPTS_QEMU_MIPS[@]}"
+    ci_unix_build_ffi_lib_helper mips-linux-gnu-gcc
 }
 
 function ci_unix_qemu_mips_run_tests {
     # Issues with MIPS tests:
     # - (i)listdir does not work, it always returns the empty list (it's an issue with the underlying C call)
-    # - ffi tests do not work
     file ./ports/unix/build-coverage/micropython
-    (cd tests && MICROPY_MICROPYTHON=../ports/unix/build-coverage/micropython ./run-tests.py --exclude 'vfs_posix.*\.py' --exclude 'ffi_(callback|float|float2).py')
+    (cd tests && MICROPY_MICROPYTHON=../ports/unix/build-coverage/micropython ./run-tests.py --exclude 'vfs_posix.*\.py')
 }
 
 function ci_unix_qemu_arm_setup {
@@ -680,6 +676,8 @@ function ci_unix_qemu_arm_setup {
     sudo apt-get install gcc-arm-linux-gnueabi g++-arm-linux-gnueabi
     sudo apt-get install qemu-user
     qemu-arm --version
+    sudo mkdir /etc/qemu-binfmt
+    sudo ln -s /usr/arm-linux-gnueabi/ /etc/qemu-binfmt/arm
 }
 
 function ci_unix_qemu_arm_build {
@@ -690,26 +688,22 @@ function ci_unix_qemu_arm_build {
 function ci_unix_qemu_arm_run_tests {
     # Issues with ARM tests:
     # - (i)listdir does not work, it always returns the empty list (it's an issue with the underlying C call)
-    export QEMU_LD_PREFIX=/usr/arm-linux-gnueabi
     file ./ports/unix/build-coverage/micropython
     (cd tests && MICROPY_MICROPYTHON=../ports/unix/build-coverage/micropython ./run-tests.py --exclude 'vfs_posix.*\.py')
 }
 
 function ci_unix_qemu_riscv64_setup {
-    . /etc/os-release
-    for repository in "${VERSION_CODENAME}" "${VERSION_CODENAME}-updates" "${VERSION_CODENAME}-security"
-    do
-        sudo add-apt-repository -y -n "deb [arch=riscv64] http://ports.ubuntu.com/ubuntu-ports ${repository} main"
-    done
     sudo apt-get update
-    sudo dpkg --add-architecture riscv64
-    sudo apt-get install gcc-riscv64-linux-gnu g++-riscv64-linux-gnu libffi-dev:riscv64
+    sudo apt-get install gcc-riscv64-linux-gnu g++-riscv64-linux-gnu
     sudo apt-get install qemu-user
     qemu-riscv64 --version
+    sudo mkdir /etc/qemu-binfmt
+    sudo ln -s /usr/riscv64-linux-gnu/ /etc/qemu-binfmt/riscv64
 }
 
 function ci_unix_qemu_riscv64_build {
     ci_unix_build_helper "${CI_UNIX_OPTS_QEMU_RISCV64[@]}"
+    ci_unix_build_ffi_lib_helper riscv64-linux-gnu-gcc
 }
 
 function ci_unix_qemu_riscv64_run_tests {
@@ -733,9 +727,9 @@ function ci_windows_build {
 ########################################################################################
 # ports/zephyr
 
-ZEPHYR_DOCKER_VERSION=v0.21.0
-ZEPHYR_SDK_VERSION=0.13.2
-ZEPHYR_VERSION=v3.1.0
+ZEPHYR_DOCKER_VERSION=v0.26.13
+ZEPHYR_SDK_VERSION=0.16.8
+ZEPHYR_VERSION=v3.7.0
 
 function ci_zephyr_setup {
     docker pull zephyrprojectrtos/ci:${ZEPHYR_DOCKER_VERSION}
